@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Seeed Studio mmWave Kit - MR24HPC1</title>
+<meta name="viewport" content="width=device-width" />
+<meta name="color-scheme" content="dark light" />
+
+<script
+type="module"
+src="https://unpkg.com/esp-web-tools@9/dist/web/install-button.js?module"
+></script>
+
+<style>
+body {
+  font-family: Arial, sans-serif;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 100vh;
+  position: relative;
+}
+
+body::before {
+  content: "";
+  background: url('https://wdcdn.qpic.cn/MTY4ODg1NjQ3NTM4MTE0Nw_945045_itSk-bn_kXk_tzHw_1693381542?w=1200&h=967&type=image/gif') no-repeat center center fixed;
+  background-size: cover;
+  filter: brightness(70%) opacity(80%);
+  backdrop-filter: blur(10px);
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  z-index: -1;
+}
+
+.content {
+  text-align: center;
+  box-shadow: 0px 0px 25px 0px rgba(0,0,0,0.1);
+  padding: 40px;
+  background: rgba(255, 255, 255, 0.7);
+  backdrop-filter: blur(10px);
+  position: relative;
+}
+
+h1 {
+  color: #333;
+  font-size: 2.5em;
+}
+
+p, .tutorial-steps {
+  color: #666;
+  font-size: 1.2em;
+}
+
+.tutorial-steps {
+  text-align: left;
+  padding-left: 1.5em;
+  line-height: 1.6;
+  word-wrap: break-word;
+}
+</style>
+
+</head>
+<body>
+  <div class="content">
+    <h1>Seeed Studio mmWave Kit - MR24HPC1</h1>
+    <p>
+      <esp-web-install-button manifest="seeedstudio-mmwave-kit-esp32c3/manifest.json"></esp-web-install-button>
+    </p>
+    <ol class="tutorial-steps">
+      <li>Connect the kit to your computer via a USB-C type cable.</li>
+      <li>Click the Connect button and select the port number device that has a JTAG name.</li>
+      <li>Flash Firmware. Simply click on <strong>INSTALL SEEED STUDIO MMWAVE KIT</strong>.</li>
+      <li>After flashing the firmware, you need to configure the network for the kit.<br />Using your computer or mobile phone, search for a network named <strong>seedstudio-mr24hpc1</strong><br />and configure your 2.4GHz network in the <strong>192.168.4.1</strong> page.</li>
+      <li>Enjoy your trip to Home Assistant!</li>
+    </ol>
+  </div>
+</body>
+</html>
+

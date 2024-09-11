@@ -1,0 +1,100 @@
+esphome:
+  name: seeed_mr60bha2
+  friendly_name: Seeed_MR60BHA2
+  platformio_options:
+    board_upload.maximum_size: 4194304
+  min_version: "2024.3.2" # Fix logger compile error on ESP32-C6 esphome#6323
+
+esp32:
+  board: esp32-c6-devkitc-1
+  variant: esp32c6
+  flash_size: 4MB # upload.flash_size
+  framework:
+    type: esp-idf
+    platform_version: 6.5.0 # Need at least 6.4 for ESP32-C6
+
+    # Tasmota's release of 5.1.3 works, first-party release does not LOL
+    version: 5.1.3
+    source: https://github.com/tasmota/esp-idf/releases/download/v5.1.3.240325/esp-idf-v5.1.3.zip
+
+    # Fix flash size by ensuring IDF flash size is also set (was defaulting to 2MB?!?)
+    # See https://github.com/esphome/issues/issues/5404
+    sdkconfig_options:
+      CONFIG_ESPTOOLPY_FLASHSIZE_4MB: y
+
+external_components:
+  - source:
+      type: git
+      url: https://github.com/ssieb/esphome
+      ref: adc
+    components: [ adc ]
+    refresh: 1min
+  - source:
+      type: git
+      url: https://github.com/limengdu/MR60BHA2_ESPHome_external_components
+      ref: main
+    components: [ seeed_mr60bha2 ]
+    refresh: 0s
+
+# Enable logging
+logger:
+  hardware_uart: USB_SERIAL_JTAG
+  level: DEBUG
+
+# Enable Home Assistant API
+api:
+
+ota:
+  - platform: esphome
+
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+
+  # Enable fallback hotspot (captive portal) in case wifi connection fails
+  ap:
+    ssid: "seeedstudio-mr60fda2"
+
+# For XIAO ESP32C6 Onboard LED
+# light:
+#   - platform: status_led
+#     name: "Switch state"
+#     pin: GPIO15
+
+uart:
+  id: uart_bus
+  baud_rate: 115200
+  rx_pin: 17
+  tx_pin: 16
+  parity: NONE
+  stop_bits: 1
+
+seeed_mr60bha2:
+  id: my_seeed_mr60bha2
+
+text_sensor:
+  - platform: seeed_mr60bha2
+    is_fall:
+      name: "Falling Information"
+
+binary_sensor:
+  - platform: seeed_mr60bha2
+    people_exist:
+      name: "Person Information"
+
+button:
+  - platform: seeed_mr60bha2
+    get_radar_parameters:
+      name: "Get Radar Parameters"
+    reset_radar:
+      name: "Reset"
+
+select:
+  - platform: seeed_mr60bha2
+    install_height:
+      name: "Set Install Height"
+    height_threshold:
+      name: "Set Height Threshold"
+    sensitivity:
+      name: "Set Sensitivity"
+
