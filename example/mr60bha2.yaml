@@ -1,5 +1,5 @@
 esphome:
-  name: seeed_mr60bha2
+  name: seeed-mr60bha2
   friendly_name: Seeed_MR60BHA2
   platformio_options:
     board_upload.maximum_size: 4194304
@@ -53,13 +53,29 @@ wifi:
 
   # Enable fallback hotspot (captive portal) in case wifi connection fails
   ap:
-    ssid: "seeedstudio-mr60fda2"
+    ssid: "seeedstudio-mr60bha2"
 
 # For XIAO ESP32C6 Onboard LED
 # light:
 #   - platform: status_led
 #     name: "Switch state"
 #     pin: GPIO15
+
+light:
+  - platform: esp32_rmt_led_strip
+    id: led_ring
+    name: "Seeed MR60FDA2 RGB Light"
+    pin: GPIO1
+    num_leds: 1
+    rmt_channel: 0
+    rgb_order: GRB
+    chipset: ws2812
+
+i2c:
+  sda: GPIO22
+  scl: GPIO23
+  scan: true
+  id: bus_a
 
 uart:
   id: uart_bus
@@ -72,29 +88,15 @@ uart:
 seeed_mr60bha2:
   id: my_seeed_mr60bha2
 
-text_sensor:
+sensor:
+  - platform: bh1750
+    name: "Seeed MR60FDA2 Illuminance"
+    address: 0x23
+    update_interval: 1s
   - platform: seeed_mr60bha2
-    is_fall:
-      name: "Falling Information"
-
-binary_sensor:
-  - platform: seeed_mr60bha2
-    people_exist:
-      name: "Person Information"
-
-button:
-  - platform: seeed_mr60bha2
-    get_radar_parameters:
-      name: "Get Radar Parameters"
-    reset_radar:
-      name: "Reset"
-
-select:
-  - platform: seeed_mr60bha2
-    install_height:
-      name: "Set Install Height"
-    height_threshold:
-      name: "Set Height Threshold"
-    sensitivity:
-      name: "Set Sensitivity"
-
+    breath_rate:
+      name: "Real-time respiratory rate"
+    heart_rate:
+      name: "Real-time heart rate"
+    distance:
+      name: "Distance to detection object"
