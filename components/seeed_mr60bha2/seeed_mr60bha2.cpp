@@ -163,7 +163,7 @@ void MR60BHA2Component::splitFrame(uint8_t buffer) {
         ESP_LOGD(TAG, "HEAD_CKSUM_FRAME ERROR: 0x%02x", buffer);
         ESP_LOGD(TAG, "GET CURRENT_FRAME:");
         for (size_t i = 0; i < this->current_frame_len_; i++) {
-          ESP_LOGD(TAG, "  0x%02x", buffer[i]);
+          ESP_LOGD(TAG, "  0x%02x", current_frame_buf[i]);
         }
         this->current_frame_locate_ = LOCATE_FRAME_HEADER;
       }
@@ -190,7 +190,7 @@ void MR60BHA2Component::splitFrame(uint8_t buffer) {
         ESP_LOGD(TAG, "DATA_CKSUM_FRAME ERROR: 0x%02x", buffer);
         ESP_LOGD(TAG, "GET CURRENT_FRAME:");
         for (size_t i = 0; i < this->current_frame_len_; i++) {
-          ESP_LOGD(TAG, "  0x%02x", buffer[i]);
+          ESP_LOGD(TAG, "  0x%02x", current_frame_buf[i]);
         }
         this->current_frame_locate_ = LOCATE_FRAME_HEADER;
       }
