@@ -52,7 +52,8 @@ wifi:
   # Enable fallback hotspot (captive portal) in case wifi connection fails
   ap:
     ssid: "seeedstudio-mr60bha2"
-    manual_ip: "192.168.4.1"
+
+captive_portal:
 
 # For XIAO ESP32C6 Onboard LED
 # light:
