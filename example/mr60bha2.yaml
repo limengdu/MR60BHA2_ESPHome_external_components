@@ -64,7 +64,7 @@ captive_portal:
 light:
   - platform: esp32_rmt_led_strip
     id: led_ring
-    name: "Seeed MR60FDA2 RGB Light"
+    name: "Seeed MR60BHA2 RGB Light"
     pin: GPIO1
     num_leds: 1
     rmt_channel: 0
@@ -90,7 +90,7 @@ seeed_mr60bha2:
 
 sensor:
   - platform: bh1750
-    name: "Seeed MR60FDA2 Illuminance"
+    name: "Seeed MR60BHA2 Illuminance"
     address: 0x23
     update_interval: 1s
   - platform: seeed_mr60bha2

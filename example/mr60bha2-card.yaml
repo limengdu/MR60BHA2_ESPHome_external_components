@@ -8,7 +8,7 @@ views:
         cards:
           - type: tile
             entity: light.seeed_mr60bha2_seeed_mr60fda2_rgb_light
-            name: Seeed MR60FDA2 RGB Light
+            name: Seeed MR60BHA2 RGB Light
             color: green
             features:
               - type: light-brightness
@@ -23,6 +23,6 @@ views:
             name: Real-time respiratory rate
           - type: tile
             entity: sensor.seeed_mr60bha2_seeed_mr60fda2_illuminance
-            name: Seeed MR60FDA2 Illuminance
+            name: Seeed MR60BHA2 Illuminance
             color: accent
         title: Seeed_MR60BHA2
