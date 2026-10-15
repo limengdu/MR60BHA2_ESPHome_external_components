@@ -194,7 +194,7 @@ To get started with ESPHome, follow these steps:
 
 1. **Access the ESPHome Dashboard**: In Home Assistant, navigate to the ESPHome add-on. You should see your XIAO ESP32C6 listed among the devices.
 
-2. **Create a New Configuration**: Click on the device to open its configuration. Here, you can adjust settings such as the sensor's sensitivity, reporting intervals, and output formats. ESPHome uses a YAML configuration format, which is user-friendly and allows you to define various parameters. You can use the following template YAML file as a starting point for your configuration, which is designed specifically for the MR60BHA2 Sensor:
+2. **Create a New Configuration**: Click on the device to open its configuration. Here, you can adjust settings such as the sensor's sensitivity, reporting intervals, and output formats. ESPHome uses a YAML configuration format, which is user-friendly and allows you to define various parameters. You can use the following template YAML file as a starting point for your configuration, which is designed specifically for the MR60BHA2 Sensor. The copy in `example/mr60bha2.yaml` loads the component from this repository for firmware builds; the template below uses the git source so it can be pasted into the Home Assistant ESPHome Builder.
 
   ```yaml showLineNumbers title=example/mr60bha2.yaml
   # template from https://github.com/limengdu/MR60BHA2_ESPHome_external_components/blob/main/example/mr60bha2.yaml

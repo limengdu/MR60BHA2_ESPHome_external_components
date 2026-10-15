@@ -20,13 +20,13 @@ esp32:
   framework:
     type: esp-idf
 
+# Firmware and CI load the component from this repository.
+# Home Assistant ESPHome Builder configs should use the git source in README.md.
 external_components:
   - source:
-      type: git
-      url: https://github.com/limengdu/MR60BHA2_ESPHome_external_components
-      ref: main
+      type: local
+      path: ../components
     components: [ seeed_mr60bha2 ]
-    refresh: 0s
 
 # Enable logging
 logger:
