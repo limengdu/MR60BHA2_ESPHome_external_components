@@ -290,6 +290,10 @@ sensor:
     address: 0x23
     update_interval: 1s
   - platform: seeed_mr60bha2
+    # Optional. When set, breath_rate, heart_rate, distance, and num_targets
+    # are published to Home Assistant at most this often. Presence (has_target)
+    # still updates immediately. Omit this key to publish every new radar reading.
+    update_interval: 10s
     breath_rate:
       name: "Real-time respiratory rate"
     heart_rate:
@@ -301,6 +305,12 @@ sensor:
   ```
 
 3. **Customize Functionality**: You can enhance the sensor's capabilities by exploring various features available in ESPHome, allowing for flexible adjustments to suit your specific needs.
+
+   The radar still reads UART frames as they arrive. `update_interval` on `sensor.seeed_mr60bha2` only limits how often `breath_rate`, `heart_rate`, `distance`, and `num_targets` are published to Home Assistant. Typical values are `10s` or `60s`. If you omit the key, each new reading is published as soon as the value changes.
+
+   Presence (`binary_sensor` `has_target`) is not throttled. When no person is detected, the vital-sign sensors are still cleared to `0` immediately so Home Assistant does not keep a stale heart rate or breath rate.
+
+   Each nested sensor also accepts standard ESPHome sensor options, including `filters` such as `throttle` or `throttle_average`, if you want a different rate for one reading only.
 
 4. **Upload the Updated Firmware**: After making your modifications, save the configuration. The ESPHome dashboard allows you to upload the firmware directly over the air. Simply click the `Upload` button, and follow the prompts to complete the process. This streamlined method makes it easy to keep your firmware up to date.
 

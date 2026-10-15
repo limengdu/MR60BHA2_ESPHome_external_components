@@ -3,6 +3,7 @@ name: CI
 on:
   pull_request:
     paths:
+      - 'components/**'
       - 'example/mr60bha2.yaml'
       - '.github/workflows/ci.yml'
   schedule:

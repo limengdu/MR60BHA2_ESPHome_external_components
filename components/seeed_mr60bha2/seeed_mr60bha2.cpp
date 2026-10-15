@@ -1,4 +1,5 @@
 #include "seeed_mr60bha2.h"
+#include "esphome/core/hal.h"
 #include "esphome/core/log.h"
 
 #include <cinttypes>
@@ -21,8 +22,35 @@ void MR60BHA2Component::dump_config() {
   LOG_SENSOR(" ", "Heart Rate Sensor", this->heart_rate_sensor_);
   LOG_SENSOR(" ", "Distance Sensor", this->distance_sensor_);
   LOG_SENSOR(" ", "Target Number Sensor", this->num_targets_sensor_);
+  if (this->sensor_update_interval_ms_ > 0) {
+    ESP_LOGCONFIG(TAG, "  Sensor Update Interval: %.1fs", this->sensor_update_interval_ms_ / 1000.0f);
+  }
 #endif
 }
+
+#ifdef USE_SENSOR
+void MR60BHA2Component::publish_sensor_state_(sensor::Sensor *sens, float value, uint32_t *last_publish_ms,
+                                              bool force) {
+  if (sens == nullptr) {
+    return;
+  }
+  if (force) {
+    *last_publish_ms = 0;
+    sens->publish_state(value);
+    return;
+  }
+  if (sens->state == value) {
+    return;
+  }
+  uint32_t now = millis();
+  if (this->sensor_update_interval_ms_ != 0 && *last_publish_ms != 0 &&
+      now - *last_publish_ms < this->sensor_update_interval_ms_) {
+    return;
+  }
+  *last_publish_ms = now;
+  sens->publish_state(value);
+}
+#endif
 
 // main loop
 void MR60BHA2Component::loop() {
@@ -141,10 +169,8 @@ void MR60BHA2Component::process_frame_(uint16_t frame_id, uint16_t frame_type, c
         if (current_breath_rate_int != 0) {
           float breath_rate_float;
           memcpy(&breath_rate_float, &current_breath_rate_int, sizeof(float));
-          if (this->breath_rate_sensor_->state == breath_rate_float) {
-            break;
-          }
-          this->breath_rate_sensor_->publish_state(breath_rate_float);
+          this->publish_sensor_state_(this->breath_rate_sensor_, breath_rate_float,
+                                      &this->last_breath_rate_publish_ms_);
         }
       }
       break;
@@ -157,16 +183,16 @@ void MR60BHA2Component::process_frame_(uint16_t frame_id, uint16_t frame_type, c
         this->has_target_binary_sensor_->publish_state(has_target_int);
         if (has_target_int == 0) {
           if (this->breath_rate_sensor_ != nullptr && this->breath_rate_sensor_->state != 0.0) {
-            this->breath_rate_sensor_->publish_state(0.0);
+            this->publish_sensor_state_(this->breath_rate_sensor_, 0.0, &this->last_breath_rate_publish_ms_, true);
           }
           if (this->heart_rate_sensor_ != nullptr && this->heart_rate_sensor_->state != 0.0) {
-            this->heart_rate_sensor_->publish_state(0.0);
+            this->publish_sensor_state_(this->heart_rate_sensor_, 0.0, &this->last_heart_rate_publish_ms_, true);
           }
           if (this->distance_sensor_ != nullptr && this->distance_sensor_->state != 0.0) {
-            this->distance_sensor_->publish_state(0.0);
+            this->publish_sensor_state_(this->distance_sensor_, 0.0, &this->last_distance_publish_ms_, true);
           }
           if (this->num_targets_sensor_ != nullptr && this->num_targets_sensor_->state != 0) {
-            this->num_targets_sensor_->publish_state(0);
+            this->publish_sensor_state_(this->num_targets_sensor_, 0, &this->last_num_targets_publish_ms_, true);
           }
         }
       }
@@ -177,10 +203,7 @@ void MR60BHA2Component::process_frame_(uint16_t frame_id, uint16_t frame_type, c
         if (current_heart_rate_int != 0) {
           float heart_rate_float;
           memcpy(&heart_rate_float, &current_heart_rate_int, sizeof(float));
-          if (this->heart_rate_sensor_->state == heart_rate_float) {
-            break;
-          }
-          this->heart_rate_sensor_->publish_state(heart_rate_float);
+          this->publish_sensor_state_(this->heart_rate_sensor_, heart_rate_float, &this->last_heart_rate_publish_ms_);
         }
       }
       break;
@@ -190,20 +213,15 @@ void MR60BHA2Component::process_frame_(uint16_t frame_id, uint16_t frame_type, c
           uint32_t current_distance_int = encode_uint32(data[7], data[6], data[5], data[4]);
           float distance_float;
           memcpy(&distance_float, &current_distance_int, sizeof(float));
-          if (this->distance_sensor_->state == distance_float) {
-            break;
-          }
-          this->distance_sensor_->publish_state(distance_float);
+          this->publish_sensor_state_(this->distance_sensor_, distance_float, &this->last_distance_publish_ms_);
         }
       }
       break;
     case PRINT_CLOUD_BUFFER:
       if (this->num_targets_sensor_ != nullptr && length >= 4) {
         uint32_t current_num_targets_int = encode_uint32(data[3], data[2], data[1], data[0]);
-        if (this->num_targets_sensor_->state == current_num_targets_int) {
-          break;
-        }
-        this->num_targets_sensor_->publish_state(current_num_targets_int);
+        this->publish_sensor_state_(this->num_targets_sensor_, current_num_targets_int,
+                                    &this->last_num_targets_publish_ms_);
       }
       break;
     default:
