@@ -4,6 +4,8 @@ on:
   pull_request:
     paths:
       - 'example/mr60bha2.yaml'
+      - 'components/**'
+      - 'tests/**'
       - '.github/workflows/ci.yml'
   schedule:
     - cron: '0 0 * * *'
@@ -27,6 +29,8 @@ jobs:
     steps:
       - name: Checkout source code
         uses: actions/checkout@v4
+      - name: Protocol unit tests
+        run: python3 tests/test_mr60bha2_protocol.py
       - name: ESPHome ${{ matrix.esphome-version }}
         uses: esphome/build-action@v7
         with:

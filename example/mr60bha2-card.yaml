@@ -16,6 +16,12 @@ views:
             entity: sensor.seeed_mr60bha2_distance_to_detection_object
             name: Distance to detection object
           - type: tile
+            entity: sensor.seeed_mr60bha2_target_x
+            name: Target X
+          - type: tile
+            entity: sensor.seeed_mr60bha2_target_y
+            name: Target Y
+          - type: tile
             entity: sensor.seeed_mr60bha2_real_time_heart_rate
             name: Real-time heart rate
           - type: tile

@@ -1,3 +1,7 @@
+# Target distance reporting is available with radar module firmware 1.6.10 or newer.
+# Radar firmware is separate from this ESPHome image; upgrade steps:
+# https://wiki.seeedstudio.com/getting_started_with_mr60bha2_mmwave_kit/#module-firmware-upgrade
+
 substitutions:
   name: "seeedstudio-mr60bha2-kit"
   friendly_name: "Seeed Studio MR60BHA2 Kit"
@@ -8,7 +12,7 @@ esphome:
   name_add_mac_suffix: true
   project:
     name: "seeedstudio.mr60bha2_kit"
-    version: "3.5"
+    version: "3.6"
   platformio_options:
     board_upload.maximum_size: 4194304
   min_version: "2024.3.2" # Fix logger compile error on ESP32-C6 esphome#6323
@@ -20,13 +24,13 @@ esp32:
   framework:
     type: esp-idf
 
+# Firmware and CI load the component from this repository.
+# Home Assistant ESPHome Builder configs should use the git source in README.md.
 external_components:
   - source:
-      type: git
-      url: https://github.com/limengdu/MR60BHA2_ESPHome_external_components
-      ref: main
+      type: local
+      path: ../components
     components: [ seeed_mr60bha2 ]
-    refresh: 0s
 
 # Enable logging
 logger:
@@ -82,6 +86,9 @@ binary_sensor:
   - platform: seeed_mr60bha2
     has_target:
       name: "Person Information"
+      # Keep presence on for 5s after the last detection so far-zone tracking stays usable.
+      filters:
+        - delayed_off: 5s
 
 sensor:
   - platform: bh1750
@@ -97,3 +104,7 @@ sensor:
       name: "Distance to detection object"
     num_targets:
       name: "Target Number"
+    target_x:
+      name: "Target X"
+    target_y:
+      name: "Target Y"

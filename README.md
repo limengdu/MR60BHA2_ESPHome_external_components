@@ -45,7 +45,7 @@ These steps will guide you through the integration process, helping you make the
 ## Getting Started
 
 :::note Attention
-Please note that when we refer to firmware updates or modifications, we are specifically addressing the firmware on the XIAO ESP32C6.
+This repository updates the firmware on the XIAO ESP32C6. The mmWave module has its own firmware, which is upgraded separately (see [Radar module firmware](#radar-module-firmware) below).
 :::
 
 To successfully integrate the MR60BHA2 mmWave Sensor with Home Assistant, you will need the following components:
@@ -209,7 +209,7 @@ esphome:
   name_add_mac_suffix: true
   project:
     name: "seeedstudio.mr60bha2_kit"
-    version: "3.5"
+    version: "3.6"
   platformio_options:
     board_upload.maximum_size: 4194304
   min_version: "2024.3.2" # Fix logger compile error on ESP32-C6 esphome#6323
@@ -283,6 +283,8 @@ binary_sensor:
   - platform: seeed_mr60bha2
     has_target:
       name: "Person Information"
+      filters:
+        - delayed_off: 5s
 
 sensor:
   - platform: bh1750
@@ -298,6 +300,10 @@ sensor:
       name: "Distance to detection object"
     num_targets:
       name: "Target Number"
+    target_x:
+      name: "Target X"
+    target_y:
+      name: "Target Y"
   ```
 
 3. **Customize Functionality**: You can enhance the sensor's capabilities by exploring various features available in ESPHome, allowing for flexible adjustments to suit your specific needs.
@@ -310,6 +316,31 @@ By utilizing ESPHome, you empower yourself to make ongoing improvements to your 
 
 Through these steps, you can maximize the functionality of your MR60BHA2 mmWave Sensor and XIAO ESP32C6 setup, transforming it into a highly customized and responsive smart home system tailored to your preferences and needs.
 
+### Radar module firmware
+
+The mmWave module speaks a UART protocol that this ESPHome component decodes. Distance to the nearest target (`0x0A16`) is reported on **radar firmware 1.6.10 and newer**. Presence, breath rate, and heart rate work on earlier module firmware.
+
+Recommended module firmware: **1.6.12** (or the latest build published on the [Seeed wiki](https://wiki.seeedstudio.com/getting_started_with_mr60bha2_mmwave_kit/#module-firmware-upgrade)).
+
+This component:
+
+- Collects every checksum-valid UART frame, including extra types added in recent firmware (breath/heart phase, point cloud, status), so the parser stays aligned.
+- Reads both the 4-byte and 8-byte distance payloads used across firmware 1.6.4 and 1.6.10+.
+- Uses tracked-target coordinates (`0x0A04`), detection-cloud coordinates (`0x0A08`), and unfiltered position (`0x0A17`) for distance, X/Y, and occupancy outside the 1.5 m heart-rate zone.
+- Example YAML holds `has_target` for 5 seconds (`delayed_off`) so occupancy stays usable while the module flickers.
+
+Far-zone presence still depends on the module sending those coordinate frames. When the radar itself stops reporting around 1.8 m, ESPHome cannot reconstruct a target. The fall-detection kit (MR60FDA2 / MR60FPA2) uses a different repository: [MR60FDA2_ESPHome_external_components](https://github.com/limengdu/MR60FDA2_ESPHome_external_components).
+
+To inspect live frames while testing, set the ESPHome logger to `VERBOSE` for `seeed_mr60bha2`:
+
+```yaml
+logger:
+  hardware_uart: USB_SERIAL_JTAG
+  level: VERBOSE
+  logs:
+    seeed_mr60bha2: VERBOSE
+```
+
 :::note Attention
 Zone control & modifying mmwv sensor firmware is only accessible by businesses in partnership with Seeed Studios & not available to home users. Home users are limited to basic presence, target number, distance, heartrate & tweaking ESPhome firmware, which modifies the ESP32-C6 microcontrolller.
 :::
@@ -319,4 +350,5 @@ Zone control & modifying mmwv sensor firmware is only accessible by businesses i
 - [ESPHome — ESPHome](https://esphome.io/)
 - [Installation - Home Assistant](https://www.home-assistant.io/installation/)
 - [limengdu/MR60BHA2_ESPHome_external_components](https://github.com/limengdu/MR60BHA2_ESPHome_external_components)
+- [MR60BHA2 module firmware upgrade](https://wiki.seeedstudio.com/getting_started_with_mr60bha2_mmwave_kit/#module-firmware-upgrade)
 

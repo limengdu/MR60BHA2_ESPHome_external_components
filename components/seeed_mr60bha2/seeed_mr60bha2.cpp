@@ -2,12 +2,37 @@
 #include "esphome/core/log.h"
 
 #include <cinttypes>
+#include <cmath>
 #include <utility>
 
 namespace esphome {
 namespace seeed_mr60bha2 {
 
 static const char *const TAG = "seeed_mr60bha2";
+
+static float decode_le_float_(const uint8_t *data) {
+  uint32_t raw = encode_uint32(data[3], data[2], data[1], data[0]);
+  float value;
+  memcpy(&value, &raw, sizeof(float));
+  return value;
+}
+
+/**
+ * Convert a radar range value to centimetres.
+ * 将雷达距离值转换为厘米。
+ *
+ * 0x0A16 payloads from shipped modules report centimetres. Some firmware
+ * builds report metres (values in the 0.5–6.5 m operating window).
+ * 量产模块的 0x0A16 载荷以厘米上报。部分固件在 0.5–6.5 m 工作窗口内以米上报。
+ */
+static float range_to_cm_(float value) {
+  if (std::isfinite(value) && value > 0.0f && value < 10.0f) {
+    return value * 100.0f;
+  }
+  return value;
+}
+
+static float hypot_to_cm_(float x_m, float y_m) { return std::hypot(x_m, y_m) * 100.0f; }
 
 // Prints the component's configuration data. dump_config() prints all of the component's configuration
 // items in an easy-to-read format, including the configuration key-value pairs.
@@ -21,6 +46,8 @@ void MR60BHA2Component::dump_config() {
   LOG_SENSOR(" ", "Heart Rate Sensor", this->heart_rate_sensor_);
   LOG_SENSOR(" ", "Distance Sensor", this->distance_sensor_);
   LOG_SENSOR(" ", "Target Number Sensor", this->num_targets_sensor_);
+  LOG_SENSOR(" ", "Target X Sensor", this->target_x_sensor_);
+  LOG_SENSOR(" ", "Target Y Sensor", this->target_y_sensor_);
 #endif
 }
 
@@ -80,18 +107,26 @@ bool MR60BHA2Component::validate_message_() {
     return data[at] == FRAME_HEADER_BUFFER;
   }
 
+  if (at <= 2) {
+    return true;
+  }
+
+  if (at <= 4) {
+    if (at == 4) {
+      uint16_t length = encode_uint16(data[3], data[4]);
+      if (length > MAX_FRAME_DATA_LENGTH) {
+        ESP_LOGW(TAG, "FRAME_LEN ERROR: %u", length);
+        return false;
+      }
+    }
+    return true;
+  }
+
   if (at <= 6) {
     return true;
   }
 
   uint16_t frame_type = encode_uint16(data[5], data[6]);
-
-  if (frame_type != BREATH_RATE_TYPE_BUFFER && frame_type != HEART_RATE_TYPE_BUFFER &&
-      frame_type != DISTANCE_TYPE_BUFFER && frame_type != PEOPLE_EXIST_TYPE_BUFFER &&
-      frame_type != PRINT_CLOUD_BUFFER) {
-    return false;
-  }
-
   uint8_t header_checksum = data[at];
 
   if (at == 7) {
@@ -103,7 +138,9 @@ bool MR60BHA2Component::validate_message_() {
     return true;
   }
 
-  // Wait until all data is read
+  // Wait until all data is read. Extra firmware frame types (phase, raw
+  // cloud, status, ...) are collected in full so the UART parser stays aligned.
+  // 等完整帧收齐。固件额外帧（相位、点云、状态等）也完整收取，避免串口解析失步。
   uint16_t length = encode_uint16(data[3], data[4]);
   if (at - 8 < length) {
     return true;
@@ -128,14 +165,104 @@ bool MR60BHA2Component::validate_message_() {
   return false;
 }
 
-void MR60BHA2Component::process_frame_(uint16_t frame_id, uint16_t frame_type, const uint8_t *data, size_t length) {
-  if (this->has_target_binary_sensor_ != nullptr && !this->has_target_binary_sensor_->state &&
-      frame_type != PEOPLE_EXIST_TYPE_BUFFER) {
-    // Do not process other frames while people exists sensor is still false
+bool MR60BHA2Component::is_occupied_() const {
+  return this->people_detected_ || this->tracked_targets_ > 0 || this->detect_targets_ > 0 ||
+         this->alt_position_present_;
+}
+
+#ifdef USE_BINARY_SENSOR
+void MR60BHA2Component::publish_occupancy_() {
+  if (this->has_target_binary_sensor_ == nullptr) {
     return;
   }
+  const bool occupied = this->is_occupied_();
+  if (this->has_target_binary_sensor_->state == occupied) {
+    return;
+  }
+  this->has_target_binary_sensor_->publish_state(occupied);
+}
+#endif
+
+#ifdef USE_SENSOR
+void MR60BHA2Component::clear_idle_sensors_() {
+  if (this->is_occupied_()) {
+    return;
+  }
+  if (this->breath_rate_sensor_ != nullptr && this->breath_rate_sensor_->state != 0.0) {
+    this->breath_rate_sensor_->publish_state(0.0);
+  }
+  if (this->heart_rate_sensor_ != nullptr && this->heart_rate_sensor_->state != 0.0) {
+    this->heart_rate_sensor_->publish_state(0.0);
+  }
+  if (this->distance_sensor_ != nullptr && this->distance_sensor_->state != 0.0) {
+    this->distance_sensor_->publish_state(0.0);
+  }
+  if (this->num_targets_sensor_ != nullptr && this->num_targets_sensor_->state != 0) {
+    this->num_targets_sensor_->publish_state(0);
+  }
+  if (this->target_x_sensor_ != nullptr && this->target_x_sensor_->state != 0.0) {
+    this->target_x_sensor_->publish_state(0.0);
+  }
+  if (this->target_y_sensor_ != nullptr && this->target_y_sensor_->state != 0.0) {
+    this->target_y_sensor_->publish_state(0.0);
+  }
+}
+
+void MR60BHA2Component::publish_distance_cm_(float distance_cm) {
+  if (this->distance_sensor_ == nullptr || !std::isfinite(distance_cm) || distance_cm < 0.0f) {
+    return;
+  }
+  if (this->distance_sensor_->state == distance_cm) {
+    return;
+  }
+  this->distance_sensor_->publish_state(distance_cm);
+}
+
+void MR60BHA2Component::publish_target_xy_(float x_m, float y_m) {
+  if (!std::isfinite(x_m) || !std::isfinite(y_m)) {
+    return;
+  }
+  if (this->target_x_sensor_ != nullptr && this->target_x_sensor_->state != x_m) {
+    this->target_x_sensor_->publish_state(x_m);
+  }
+  if (this->target_y_sensor_ != nullptr && this->target_y_sensor_->state != y_m) {
+    this->target_y_sensor_->publish_state(y_m);
+  }
+}
+#endif
+
+void MR60BHA2Component::apply_people_counting_(uint32_t *slot, const uint8_t *data, size_t length, bool publish_count) {
+  if (length < 4) {
+    return;
+  }
+  uint32_t count = encode_uint32(data[3], data[2], data[1], data[0]);
+  *slot = count;
+#ifdef USE_SENSOR
+  if (publish_count && this->num_targets_sensor_ != nullptr && this->num_targets_sensor_->state != count) {
+    this->num_targets_sensor_->publish_state(count);
+  }
+  if (count > 0 && length >= 12) {
+    float x_m = decode_le_float_(data + 4);
+    float y_m = decode_le_float_(data + 8);
+    this->publish_target_xy_(x_m, y_m);
+    float distance_cm = hypot_to_cm_(x_m, y_m);
+    if (distance_cm >= 5.0f) {
+      this->publish_distance_cm_(distance_cm);
+    }
+  }
+  this->clear_idle_sensors_();
+#endif
+#ifdef USE_BINARY_SENSOR
+  this->publish_occupancy_();
+#endif
+}
+
+void MR60BHA2Component::process_frame_(uint16_t frame_id, uint16_t frame_type, const uint8_t *data, size_t length) {
   switch (frame_type) {
     case BREATH_RATE_TYPE_BUFFER:
+      if (!this->is_occupied_()) {
+        break;
+      }
       if (this->breath_rate_sensor_ != nullptr && length >= 4) {
         uint32_t current_breath_rate_int = encode_uint32(data[3], data[2], data[1], data[0]);
         if (current_breath_rate_int != 0) {
@@ -149,29 +276,20 @@ void MR60BHA2Component::process_frame_(uint16_t frame_id, uint16_t frame_type, c
       }
       break;
     case PEOPLE_EXIST_TYPE_BUFFER:
-      if (this->has_target_binary_sensor_ != nullptr && length >= 2) {
-        uint16_t has_target_int = encode_uint16(data[1], data[0]);
-        if (this->has_target_binary_sensor_->state == has_target_int) {
-          break;
-        }
-        this->has_target_binary_sensor_->publish_state(has_target_int);
-        if (has_target_int == 0) {
-          if (this->breath_rate_sensor_ != nullptr && this->breath_rate_sensor_->state != 0.0) {
-            this->breath_rate_sensor_->publish_state(0.0);
-          }
-          if (this->heart_rate_sensor_ != nullptr && this->heart_rate_sensor_->state != 0.0) {
-            this->heart_rate_sensor_->publish_state(0.0);
-          }
-          if (this->distance_sensor_ != nullptr && this->distance_sensor_->state != 0.0) {
-            this->distance_sensor_->publish_state(0.0);
-          }
-          if (this->num_targets_sensor_ != nullptr && this->num_targets_sensor_->state != 0) {
-            this->num_targets_sensor_->publish_state(0);
-          }
-        }
+      if (length >= 1) {
+        this->people_detected_ = data[0] != 0;
+#ifdef USE_BINARY_SENSOR
+        this->publish_occupancy_();
+#endif
+#ifdef USE_SENSOR
+        this->clear_idle_sensors_();
+#endif
       }
       break;
     case HEART_RATE_TYPE_BUFFER:
+      if (!this->is_occupied_()) {
+        break;
+      }
       if (this->heart_rate_sensor_ != nullptr && length >= 4) {
         uint32_t current_heart_rate_int = encode_uint32(data[3], data[2], data[1], data[0]);
         if (current_heart_rate_int != 0) {
@@ -185,26 +303,62 @@ void MR60BHA2Component::process_frame_(uint16_t frame_id, uint16_t frame_type, c
       }
       break;
     case DISTANCE_TYPE_BUFFER:
-      if (data[0] != 0) {
-        if (this->distance_sensor_ != nullptr && length >= 8) {
-          uint32_t current_distance_int = encode_uint32(data[7], data[6], data[5], data[4]);
-          float distance_float;
-          memcpy(&distance_float, &current_distance_int, sizeof(float));
-          if (this->distance_sensor_->state == distance_float) {
-            break;
+#ifdef USE_SENSOR
+      if (this->distance_sensor_ != nullptr) {
+        bool range_valid = false;
+        float distance_cm = 0.0f;
+        if (length >= 8) {
+          // Firmware 1.6.10+: uint32 range flag + float range.
+          // 固件 1.6.10 起：uint32 有效标志 + float 距离。
+          uint32_t range_flag = encode_uint32(data[3], data[2], data[1], data[0]);
+          range_valid = range_flag != 0;
+          distance_cm = range_to_cm_(decode_le_float_(data + 4));
+        } else if (length >= 4) {
+          uint32_t raw = encode_uint32(data[3], data[2], data[1], data[0]);
+          if (raw != 0) {
+            // Older 4-byte float payload used by some 1.6.4 frames.
+            // 部分 1.6.4 帧使用 4 字节 float 载荷。
+            float value;
+            memcpy(&value, &raw, sizeof(float));
+            range_valid = value != 0.0f;
+            distance_cm = range_to_cm_(value);
           }
-          this->distance_sensor_->publish_state(distance_float);
+        }
+        if (range_valid) {
+          this->publish_distance_cm_(distance_cm);
+        } else if (!this->is_occupied_()) {
+          this->publish_distance_cm_(0.0f);
         }
       }
+#endif
       break;
     case PRINT_CLOUD_BUFFER:
-      if (this->num_targets_sensor_ != nullptr && length >= 4) {
-        uint32_t current_num_targets_int = encode_uint32(data[3], data[2], data[1], data[0]);
-        if (this->num_targets_sensor_->state == current_num_targets_int) {
-          break;
+      this->apply_people_counting_(&this->tracked_targets_, data, length, true);
+      break;
+    case POINT_CLOUD_DETECT_BUFFER:
+      this->apply_people_counting_(&this->detect_targets_, data, length, false);
+      break;
+    case ALT_POSITION_TYPE_BUFFER:
+      if (length >= 8) {
+        float x_m = decode_le_float_(data);
+        float y_m = decode_le_float_(data + 4);
+        float distance_cm = hypot_to_cm_(x_m, y_m);
+        // Unfiltered 0x0A17 coordinates, used by the GUI for far-zone tracking.
+        // 未经滤波的 0x0A17 坐标，GUI 用它做远区跟踪。
+        this->alt_position_present_ = distance_cm >= 50.0f && distance_cm <= 600.0f;
+#ifdef USE_SENSOR
+        if (this->alt_position_present_) {
+          this->publish_target_xy_(x_m, y_m);
+          this->publish_distance_cm_(distance_cm);
         }
-        this->num_targets_sensor_->publish_state(current_num_targets_int);
+        this->clear_idle_sensors_();
+#endif
+#ifdef USE_BINARY_SENSOR
+        this->publish_occupancy_();
+#endif
       }
+      break;
+    case HEART_BREATH_PHASE_TYPE_BUFFER:
       break;
     default:
       break;
