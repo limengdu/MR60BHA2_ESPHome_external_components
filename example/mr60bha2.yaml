@@ -86,6 +86,9 @@ binary_sensor:
   - platform: seeed_mr60bha2
     has_target:
       name: "Person Information"
+      # Keep presence on for 5s after the last detection so far-zone tracking stays usable.
+      filters:
+        - delayed_off: 5s
 
 sensor:
   - platform: bh1750
@@ -101,3 +104,7 @@ sensor:
       name: "Distance to detection object"
     num_targets:
       name: "Target Number"
+    target_x:
+      name: "Target X"
+    target_y:
+      name: "Target Y"

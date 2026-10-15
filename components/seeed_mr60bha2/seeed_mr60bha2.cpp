@@ -46,6 +46,8 @@ void MR60BHA2Component::dump_config() {
   LOG_SENSOR(" ", "Heart Rate Sensor", this->heart_rate_sensor_);
   LOG_SENSOR(" ", "Distance Sensor", this->distance_sensor_);
   LOG_SENSOR(" ", "Target Number Sensor", this->num_targets_sensor_);
+  LOG_SENSOR(" ", "Target X Sensor", this->target_x_sensor_);
+  LOG_SENSOR(" ", "Target Y Sensor", this->target_y_sensor_);
 #endif
 }
 
@@ -163,12 +165,17 @@ bool MR60BHA2Component::validate_message_() {
   return false;
 }
 
+bool MR60BHA2Component::is_occupied_() const {
+  return this->people_detected_ || this->tracked_targets_ > 0 || this->detect_targets_ > 0 ||
+         this->alt_position_present_;
+}
+
 #ifdef USE_BINARY_SENSOR
 void MR60BHA2Component::publish_occupancy_() {
   if (this->has_target_binary_sensor_ == nullptr) {
     return;
   }
-  const bool occupied = this->people_detected_ || this->tracked_targets_ > 0;
+  const bool occupied = this->is_occupied_();
   if (this->has_target_binary_sensor_->state == occupied) {
     return;
   }
@@ -178,7 +185,7 @@ void MR60BHA2Component::publish_occupancy_() {
 
 #ifdef USE_SENSOR
 void MR60BHA2Component::clear_idle_sensors_() {
-  if (this->people_detected_ || this->tracked_targets_ > 0) {
+  if (this->is_occupied_()) {
     return;
   }
   if (this->breath_rate_sensor_ != nullptr && this->breath_rate_sensor_->state != 0.0) {
@@ -193,6 +200,12 @@ void MR60BHA2Component::clear_idle_sensors_() {
   if (this->num_targets_sensor_ != nullptr && this->num_targets_sensor_->state != 0) {
     this->num_targets_sensor_->publish_state(0);
   }
+  if (this->target_x_sensor_ != nullptr && this->target_x_sensor_->state != 0.0) {
+    this->target_x_sensor_->publish_state(0.0);
+  }
+  if (this->target_y_sensor_ != nullptr && this->target_y_sensor_->state != 0.0) {
+    this->target_y_sensor_->publish_state(0.0);
+  }
 }
 
 void MR60BHA2Component::publish_distance_cm_(float distance_cm) {
@@ -204,12 +217,50 @@ void MR60BHA2Component::publish_distance_cm_(float distance_cm) {
   }
   this->distance_sensor_->publish_state(distance_cm);
 }
+
+void MR60BHA2Component::publish_target_xy_(float x_m, float y_m) {
+  if (!std::isfinite(x_m) || !std::isfinite(y_m)) {
+    return;
+  }
+  if (this->target_x_sensor_ != nullptr && this->target_x_sensor_->state != x_m) {
+    this->target_x_sensor_->publish_state(x_m);
+  }
+  if (this->target_y_sensor_ != nullptr && this->target_y_sensor_->state != y_m) {
+    this->target_y_sensor_->publish_state(y_m);
+  }
+}
 #endif
+
+void MR60BHA2Component::apply_people_counting_(uint32_t *slot, const uint8_t *data, size_t length, bool publish_count) {
+  if (length < 4) {
+    return;
+  }
+  uint32_t count = encode_uint32(data[3], data[2], data[1], data[0]);
+  *slot = count;
+#ifdef USE_SENSOR
+  if (publish_count && this->num_targets_sensor_ != nullptr && this->num_targets_sensor_->state != count) {
+    this->num_targets_sensor_->publish_state(count);
+  }
+  if (count > 0 && length >= 12) {
+    float x_m = decode_le_float_(data + 4);
+    float y_m = decode_le_float_(data + 8);
+    this->publish_target_xy_(x_m, y_m);
+    float distance_cm = hypot_to_cm_(x_m, y_m);
+    if (distance_cm >= 5.0f) {
+      this->publish_distance_cm_(distance_cm);
+    }
+  }
+  this->clear_idle_sensors_();
+#endif
+#ifdef USE_BINARY_SENSOR
+  this->publish_occupancy_();
+#endif
+}
 
 void MR60BHA2Component::process_frame_(uint16_t frame_id, uint16_t frame_type, const uint8_t *data, size_t length) {
   switch (frame_type) {
     case BREATH_RATE_TYPE_BUFFER:
-      if (!this->people_detected_ && this->tracked_targets_ == 0) {
+      if (!this->is_occupied_()) {
         break;
       }
       if (this->breath_rate_sensor_ != nullptr && length >= 4) {
@@ -236,7 +287,7 @@ void MR60BHA2Component::process_frame_(uint16_t frame_id, uint16_t frame_type, c
       }
       break;
     case HEART_RATE_TYPE_BUFFER:
-      if (!this->people_detected_ && this->tracked_targets_ == 0) {
+      if (!this->is_occupied_()) {
         break;
       }
       if (this->heart_rate_sensor_ != nullptr && length >= 4) {
@@ -275,27 +326,30 @@ void MR60BHA2Component::process_frame_(uint16_t frame_id, uint16_t frame_type, c
         }
         if (range_valid) {
           this->publish_distance_cm_(distance_cm);
-        } else if (!this->people_detected_ && this->tracked_targets_ == 0) {
+        } else if (!this->is_occupied_()) {
           this->publish_distance_cm_(0.0f);
         }
       }
 #endif
       break;
     case PRINT_CLOUD_BUFFER:
-      if (length >= 4) {
-        uint32_t current_num_targets_int = encode_uint32(data[3], data[2], data[1], data[0]);
-        this->tracked_targets_ = current_num_targets_int;
+      this->apply_people_counting_(&this->tracked_targets_, data, length, true);
+      break;
+    case POINT_CLOUD_DETECT_BUFFER:
+      this->apply_people_counting_(&this->detect_targets_, data, length, false);
+      break;
+    case ALT_POSITION_TYPE_BUFFER:
+      if (length >= 8) {
+        float x_m = decode_le_float_(data);
+        float y_m = decode_le_float_(data + 4);
+        float distance_cm = hypot_to_cm_(x_m, y_m);
+        // Unfiltered 0x0A17 coordinates, used by the GUI for far-zone tracking.
+        // 未经滤波的 0x0A17 坐标，GUI 用它做远区跟踪。
+        this->alt_position_present_ = distance_cm >= 50.0f && distance_cm <= 600.0f;
 #ifdef USE_SENSOR
-        if (this->num_targets_sensor_ != nullptr && this->num_targets_sensor_->state != current_num_targets_int) {
-          this->num_targets_sensor_->publish_state(current_num_targets_int);
-        }
-        if (current_num_targets_int > 0 && length >= 12) {
-          float x_m = decode_le_float_(data + 4);
-          float y_m = decode_le_float_(data + 8);
-          float distance_cm = hypot_to_cm_(x_m, y_m);
-          if (distance_cm >= 5.0f) {
-            this->publish_distance_cm_(distance_cm);
-          }
+        if (this->alt_position_present_) {
+          this->publish_target_xy_(x_m, y_m);
+          this->publish_distance_cm_(distance_cm);
         }
         this->clear_idle_sensors_();
 #endif
@@ -304,20 +358,7 @@ void MR60BHA2Component::process_frame_(uint16_t frame_id, uint16_t frame_type, c
 #endif
       }
       break;
-    case ALT_POSITION_TYPE_BUFFER:
-#ifdef USE_SENSOR
-      if (this->distance_sensor_ != nullptr && length >= 8) {
-        float x_m = decode_le_float_(data);
-        float y_m = decode_le_float_(data + 4);
-        float distance_cm = hypot_to_cm_(x_m, y_m);
-        if (distance_cm >= 5.0f) {
-          this->publish_distance_cm_(distance_cm);
-        }
-      }
-#endif
-      break;
     case HEART_BREATH_PHASE_TYPE_BUFFER:
-    case POINT_CLOUD_DETECT_BUFFER:
       break;
     default:
       break;

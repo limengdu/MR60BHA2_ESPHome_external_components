@@ -86,8 +86,17 @@ def should_reset_on_type(frame_type: int) -> bool:
     return False
 
 
-def occupancy(people_detected: bool, tracked_targets: int) -> bool:
-    return people_detected or tracked_targets > 0
+def occupancy(
+    people_detected: bool,
+    tracked_targets: int,
+    detect_targets: int = 0,
+    alt_position_present: bool = False,
+) -> bool:
+    return people_detected or tracked_targets > 0 or detect_targets > 0 or alt_position_present
+
+
+def alt_position_in_range(distance_cm: float) -> bool:
+    return 50.0 <= distance_cm <= 600.0
 
 
 def test_empty_four_byte_distance_is_invalid() -> None:
@@ -156,6 +165,25 @@ def test_occupancy_or_logic() -> None:
     assert occupancy(True, 0) is True
     assert occupancy(False, 2) is True
     assert occupancy(True, 2) is True
+    assert occupancy(False, 0, detect_targets=1) is True
+    assert occupancy(False, 0, alt_position_present=True) is True
+
+
+def test_alt_position_far_zone_occupancy() -> None:
+    # 3.2 m unfiltered coordinate: inside advertised 6 m presence range
+    distance_cm = hypot_to_cm(0.8, 3.1)
+    assert alt_position_in_range(distance_cm)
+    assert occupancy(False, 0, alt_position_present=alt_position_in_range(distance_cm)) is True
+
+
+def test_alt_position_rejects_noise_near_origin() -> None:
+    assert not alt_position_in_range(hypot_to_cm(0.01, 0.02))
+
+
+def test_detection_cloud_does_not_clear_tracked_count() -> None:
+    tracked = 2
+    detect = 0
+    assert occupancy(False, tracked, detect) is True
 
 
 def test_valid_distance_frame_roundtrip() -> None:
@@ -178,6 +206,9 @@ def main() -> None:
     test_unknown_frame_types_are_consumed()
     test_length_cap()
     test_occupancy_or_logic()
+    test_alt_position_far_zone_occupancy()
+    test_alt_position_rejects_noise_near_origin()
+    test_detection_cloud_does_not_clear_tracked_count()
     test_valid_distance_frame_roundtrip()
     print("ok")
 

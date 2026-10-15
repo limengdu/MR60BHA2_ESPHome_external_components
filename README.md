@@ -283,6 +283,8 @@ binary_sensor:
   - platform: seeed_mr60bha2
     has_target:
       name: "Person Information"
+      filters:
+        - delayed_off: 5s
 
 sensor:
   - platform: bh1750
@@ -298,6 +300,10 @@ sensor:
       name: "Distance to detection object"
     num_targets:
       name: "Target Number"
+    target_x:
+      name: "Target X"
+    target_y:
+      name: "Target Y"
   ```
 
 3. **Customize Functionality**: You can enhance the sensor's capabilities by exploring various features available in ESPHome, allowing for flexible adjustments to suit your specific needs.
@@ -320,7 +326,10 @@ This component:
 
 - Collects every checksum-valid UART frame, including extra types added in recent firmware (breath/heart phase, point cloud, status), so the parser stays aligned.
 - Reads both the 4-byte and 8-byte distance payloads used across firmware 1.6.4 and 1.6.10+.
-- Uses tracked-target coordinates (`0x0A04`) as a second source for distance and occupancy when the dedicated distance frame is empty.
+- Uses tracked-target coordinates (`0x0A04`), detection-cloud coordinates (`0x0A08`), and unfiltered position (`0x0A17`) for distance, X/Y, and occupancy outside the 1.5 m heart-rate zone.
+- Example YAML holds `has_target` for 5 seconds (`delayed_off`) so occupancy stays usable while the module flickers.
+
+Far-zone presence still depends on the module sending those coordinate frames. When the radar itself stops reporting around 1.8 m, ESPHome cannot reconstruct a target. The fall-detection kit (MR60FDA2 / MR60FPA2) uses a different repository: [MR60FDA2_ESPHome_external_components](https://github.com/limengdu/MR60FDA2_ESPHome_external_components).
 
 To inspect live frames while testing, set the ESPHome logger to `VERBOSE` for `seeed_mr60bha2`:
 
