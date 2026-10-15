@@ -3,6 +3,7 @@ from esphome.components import sensor
 import esphome.config_validation as cv
 from esphome.const import (
     CONF_DISTANCE,
+    CONF_UPDATE_INTERVAL,
     DEVICE_CLASS_DISTANCE,
     ICON_HEART_PULSE,
     ICON_PULSE,
@@ -24,6 +25,7 @@ CONF_NUM_TARGETS = "num_targets"
 CONFIG_SCHEMA = cv.Schema(
     {
         cv.GenerateID(CONF_MR60BHA2_ID): cv.use_id(MR60BHA2Component),
+        cv.Optional(CONF_UPDATE_INTERVAL): cv.positive_time_period_milliseconds,
         cv.Optional(CONF_BREATH_RATE): sensor.sensor_schema(
             accuracy_decimals=0,
             state_class=STATE_CLASS_MEASUREMENT,
@@ -51,6 +53,8 @@ CONFIG_SCHEMA = cv.Schema(
 
 async def to_code(config):
     mr60bha2_component = await cg.get_variable(config[CONF_MR60BHA2_ID])
+    if CONF_UPDATE_INTERVAL in config:
+        cg.add(mr60bha2_component.set_sensor_update_interval(config[CONF_UPDATE_INTERVAL]))
     if breath_rate_config := config.get(CONF_BREATH_RATE):
         sens = await sensor.new_sensor(breath_rate_config)
         cg.add(mr60bha2_component.set_breath_rate_sensor(sens))

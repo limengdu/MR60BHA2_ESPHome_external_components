@@ -194,7 +194,7 @@ To get started with ESPHome, follow these steps:
 
 1. **Access the ESPHome Dashboard**: In Home Assistant, navigate to the ESPHome add-on. You should see your XIAO ESP32C6 listed among the devices.
 
-2. **Create a New Configuration**: Click on the device to open its configuration. Here, you can adjust settings such as the sensor's sensitivity, reporting intervals, and output formats. ESPHome uses a YAML configuration format, which is user-friendly and allows you to define various parameters. You can use the following template YAML file as a starting point for your configuration, which is designed specifically for the MR60BHA2 Sensor:
+2. **Create a New Configuration**: Click on the device to open its configuration. Here, you can adjust settings such as the sensor's sensitivity, reporting intervals, and output formats. ESPHome uses a YAML configuration format, which is user-friendly and allows you to define various parameters. You can use the following template YAML file as a starting point for your configuration, which is designed specifically for the MR60BHA2 Sensor. The copy in `example/mr60bha2.yaml` loads the component from this repository for firmware builds; the template below uses the git source so it can be pasted into the Home Assistant ESPHome Builder.
 
   ```yaml showLineNumbers title=example/mr60bha2.yaml
   # template from https://github.com/limengdu/MR60BHA2_ESPHome_external_components/blob/main/example/mr60bha2.yaml
@@ -290,6 +290,10 @@ sensor:
     address: 0x23
     update_interval: 1s
   - platform: seeed_mr60bha2
+    # Optional. When set, breath_rate, heart_rate, distance, and num_targets
+    # are published to Home Assistant at most this often. Presence (has_target)
+    # still updates immediately. Omit this key to publish every new radar reading.
+    update_interval: 10s
     breath_rate:
       name: "Real-time respiratory rate"
     heart_rate:
@@ -301,6 +305,12 @@ sensor:
   ```
 
 3. **Customize Functionality**: You can enhance the sensor's capabilities by exploring various features available in ESPHome, allowing for flexible adjustments to suit your specific needs.
+
+   The radar still reads UART frames as they arrive. `update_interval` on `sensor.seeed_mr60bha2` only limits how often `breath_rate`, `heart_rate`, `distance`, and `num_targets` are published to Home Assistant. Typical values are `10s` or `60s`. If you omit the key, each new reading is published as soon as the value changes.
+
+   Presence (`binary_sensor` `has_target`) is not throttled. When no person is detected, the vital-sign sensors are still cleared to `0` immediately so Home Assistant does not keep a stale heart rate or breath rate.
+
+   Each nested sensor also accepts standard ESPHome sensor options, including `filters` such as `throttle` or `throttle_average`, if you want a different rate for one reading only.
 
 4. **Upload the Updated Firmware**: After making your modifications, save the configuration. The ESPHome dashboard allows you to upload the firmware directly over the air. Simply click the `Upload` button, and follow the prompts to complete the process. This streamlined method makes it easy to keep your firmware up to date.
 

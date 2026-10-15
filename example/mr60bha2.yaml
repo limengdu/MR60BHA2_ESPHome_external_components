@@ -20,13 +20,13 @@ esp32:
   framework:
     type: esp-idf
 
+# Firmware and CI load the component from this repository.
+# Home Assistant ESPHome Builder configs should use the git source in README.md.
 external_components:
   - source:
-      type: git
-      url: https://github.com/limengdu/MR60BHA2_ESPHome_external_components
-      ref: main
+      type: local
+      path: ../components
     components: [ seeed_mr60bha2 ]
-    refresh: 0s
 
 # Enable logging
 logger:
@@ -89,6 +89,10 @@ sensor:
     address: 0x23
     update_interval: 1s
   - platform: seeed_mr60bha2
+    # Optional. When set, breath_rate, heart_rate, distance, and num_targets
+    # are published to Home Assistant at most this often. Presence (has_target)
+    # still updates immediately. Omit this key to publish every new radar reading.
+    update_interval: 10s
     breath_rate:
       name: "Real-time respiratory rate"
     heart_rate:
